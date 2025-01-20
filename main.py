@@ -5,9 +5,10 @@ from selenium.webdriver.support import expected_conditions as EC
 from typing import List
 from threadpool import post_comments
 import time
+from driversetup import print_available_profiles
 
 
-user_profile = "josep"
+user_profiles = ["Persona 2", "Default", "Sixto"]
 
 def get_video_urls(search_links: List[str], num_videos: int) -> dict:
     # Initialize webdriver
@@ -46,13 +47,21 @@ def get_video_urls(search_links: List[str], num_videos: int) -> dict:
     
     return results
 
-def main():
+async def main():
     search_links = [
         "https://www.youtube.com/results?search_query=python+programming",
         "https://www.youtube.com/results?search_query=selenium+tutorial"
     ]
-    num_videos = 5
-    
+    num_videos = 2
+    comments = [
+        "Great video! Very informative",
+        "Thanks for sharing this content!",
+        "This helped me understand the topic better",
+        "Well explained, keep it up!"
+    ]
+
+    print_available_profiles()
+
     results = get_video_urls(search_links, num_videos)
     for search_url, videos in results.items():
         print(f"\nSearch URL: {search_url}")
@@ -60,7 +69,7 @@ def main():
         for video in videos:
             print(video)
 
-    post_comments(results, user_profile)
+    await post_comments(results, user_profile, comments)
 
 # Example usage
 if __name__ == "__main__":

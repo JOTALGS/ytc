@@ -1,115 +1,87 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.proxy import Proxy, ProxyType
+import asyncio
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
-from typing import List, Dict
-import os
+from typing import Dict, List
 import random
+from itertools import cycle
 import time
-import json
+from contextlib import asynccontextmanager
+from driversetup import setup_driver
 
 # A general guideline is to limit the number of comments to around 5-10 per day per account,
 # and to avoid making identical or similar comments on the same video to prevent being flagged as spam.
 # Some users report being able to make up to 50-100 comments per day per account without issues, while others have encountered problems with as few as 5 comments
 
-proxies = [
-    "192.99.44.178:3128",
-    "162.241.207.217:80",
-    "191.97.96.208:8080",
-]
 
-comments = [
-    "Great video! Very informative",
-    "Thanks for sharing this content!",
-    "This helped me understand the topic better",
-    "Well explained, keep it up!"
-]
-
-email = "unaiprobador@gmail.com"
-password = "Jotajota99"
-
-
-def setup_driver(user_profile=None, headless=False):
-    """
-    Create a Selenium WebDriver instance with optional user profile and proxy settings.
-
-    Args:
-        user_profile (str): The username for the Chrome user profile.
-        proxy (str): The proxy server address in the format 'host:port'.
-        headless (bool): Whether to run the browser in headless mode.
-
-    Returns:
-        webdriver.Chrome: Configured WebDriver instance.
-    """
-    options = Options()
-    options.add_argument("--remote-debugging-port=9222")
-    options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--no-sandbox")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option('useAutomationExtension', False)
-
-    if headless:
-        options.add_argument("--headless")
-        options.add_argument("--disable-gpu")
-
-    if user_profile:
-        profile_path = os.path.expandvars(f'C:\\Users\\{user_profile}\\AppData\\Local\\Google\\Chrome\\User Data')
-        options.add_argument(f'--user-data-dir={profile_path}')
-
-    capabilities = webdriver.DesiredCapabilities.CHROME
-
-    proxy = random.choice(proxies)
-    if proxy:
-        proxy_settings = Proxy()
-        proxy_settings.proxy_type = ProxyType.MANUAL
-        proxy_settings.http_proxy = proxy
-        proxy_settings.ssl_proxy = proxy
-        proxy_settings.add_to_capabilities(capabilities)
-
-    service = Service(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=options, desired_capabilities=capabilities)
-
-    # Remove the "navigator.webdriver" property
-    driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-
-    return driver
-
-def post_comments(video_urls_dict: Dict[str, List[str]], user_profile=None):
-    driver = setup_driver(user_profile)
-    try:
-        for search_url, videos in video_urls_dict.items():
-            for video_url in videos:
-                driver.get(video_url)
-                
-                # Wait for comment box
-                comment_box = WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "#simplebox-placeholder"))
-                )
-                comment_box.click()
-                
-                # Find and fill comment field
-                comment_field = WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "#contenteditable-root"))
-                )
-                
-                # Select random comment
-                random_comment = random.choice(comments)
-                comment_field.send_keys(random_comment)
-                
-                # Submit comment
-                submit_button = driver.find_element(By.CSS_SELECTOR, "#submit-button")
-                submit_button.click()
-                
-                # Wait between comments
-                time.sleep(random.uniform(30, 60))
+class ProfileRotator:
+    def __init__(self, profiles: List[str]):
+        self.profile_cycle = cycle(profiles)
+        self._lock = asyncio.Lock()
     
+    async def get_next_profile(self) -> str:
+        async with self._lock:
+            return next(self.profile_cycle)
+
+
+@asynccontextmanager
+async def get_driver(profile: str):
+    """Async context manager for WebDriver"""
+    driver = setup_driver(profile)
+    try:
+        yield driver
     finally:
         driver.quit()
+
+async def post_single_comment(video_url: str, profile: str, comments: List[str]) -> None:
+    """Post a comment on a single video using the specified profile"""
+    async with get_driver(profile) as driver:
+        try:
+            driver.get(video_url)
+            
+            # Wait for comment box
+            comment_box = WebDriverWait(driver, 40).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "#simplebox-placeholder"))
+            )
+            comment_box.click()
+            
+            # Find and fill comment field
+            comment_field = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "#contenteditable-root"))
+            )
+            
+            # Select random comment
+            random_comment = random.choice(comments)
+            comment_field.send_keys(random_comment)
+            
+            # Submit comment
+            submit_button = driver.find_element(By.CSS_SELECTOR, "#submit-button")
+            submit_button.click()
+            
+            # Wait between comments
+            await asyncio.sleep(random.uniform(30, 60))
+            
+            print(f"Successfully posted comment on {video_url} using profile: {profile}")
+            
+        except Exception as e:
+            print(f"Error posting comment on {video_url} with profile {profile}: {e}")
+
+async def post_comments(video_urls_dict: Dict[str, List[str]], profiles: List[str], comments: List[str]) -> None:
+    """Post comments on all videos using rotating profiles"""
+    profile_rotator = ProfileRotator(profiles)
+    tasks = []
+    
+    for search_url, videos in video_urls_dict.items():
+        for video_url in videos:
+            # Get next profile for this video
+            profile = await profile_rotator.get_next_profile()
+            # Create task for posting comment
+            task = asyncio.create_task(post_single_comment(video_url, profile, comments))
+            tasks.append(task)
+    
+    # Wait for all comments to be posted
+    await asyncio.gather(*tasks)
+
 
 def main():
     pass
