@@ -5,7 +5,8 @@ from selenium.webdriver.support import expected_conditions as EC
 from typing import List
 from threadpool import post_comments
 import time
-from driversetup import print_available_profiles
+import asyncio
+from driversetup import list_chrome_profiles
 
 
 user_profiles = ["Persona 2", "Default", "Sixto"]
@@ -60,7 +61,9 @@ async def main():
         "Well explained, keep it up!"
     ]
 
-    print_available_profiles()
+    profiles = list_chrome_profiles()
+    profiles = list(profiles.keys())
+    print(profiles)
 
     results = get_video_urls(search_links, num_videos)
     for search_url, videos in results.items():
@@ -69,8 +72,8 @@ async def main():
         for video in videos:
             print(video)
 
-    await post_comments(results, user_profile, comments)
+    await post_comments(results, profiles, comments)
 
 # Example usage
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
