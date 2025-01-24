@@ -2,18 +2,25 @@ from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.chrome.options import Options
 from typing import List
 from threadpool import post_comments
 import time
 import asyncio
-from driversetup import list_chrome_profiles
+from driversetup import list_chrome_profiles, print_available_profiles
 
 
 user_profiles = ["Persona 2", "Default", "Sixto"]
 
 def get_video_urls(search_links: List[str], num_videos: int) -> dict:
     # Initialize webdriver
-    driver = webdriver.Chrome()
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+
+    driver = webdriver.Chrome(options=chrome_options)
+    
     results = {}
     
     try:
@@ -50,17 +57,29 @@ def get_video_urls(search_links: List[str], num_videos: int) -> dict:
 
 async def main():
     search_links = [
-        "https://www.youtube.com/results?search_query=python+programming",
-        "https://www.youtube.com/results?search_query=selenium+tutorial"
+        "https://www.youtube.com/results?search_query=vue+tutorial",
+        "https://www.youtube.com/results?search_query=gta+5"
     ]
     num_videos = 2
     comments = [
-        "Great video! Very informative",
-        "Thanks for sharing this content!",
-        "This helped me understand the topic better",
-        "Well explained, keep it up!"
+        "Great content, as always!",
+        "This was so fun to watch!",
+        "Keep up the good work!",
+        "I really enjoyed this!",
+        "Awesome video, thanks for sharing!",
+        "You’re doing amazing—keep it up!",
+        "This made my day better!",
+        "Love the energy in this video!",
+        "Can’t wait to see more from you!",
+        "This was so entertaining!",
+        "You’ve got a new fan—great stuff!",
+        "This was worth watching!",
+        "You’re killing it with your content!",
+        "I’m glad I clicked on this video!",
+        "This was awesome—thanks for creating it!"
     ]
 
+    print_available_profiles()
     profiles = list_chrome_profiles()
     profiles = list(profiles.keys())
     print(profiles)

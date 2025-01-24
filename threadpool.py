@@ -25,8 +25,7 @@ class ProfileRotator:
         return profile
 
 
-@asynccontextmanager
-async def get_driver(profile: str):
+def get_driver(profile: str):
     """Async context manager for WebDriver"""
     driver = setup_driver(profile)
     try:
@@ -36,38 +35,46 @@ async def get_driver(profile: str):
 
 async def post_single_comment(video_urls: List[str], profile: str, comments: List[str]) -> None:
     """Post a comment on a single video using the specified profile"""
-    async with get_driver(profile) as driver:
-        for url in video_urls:
-            try:
-                driver.get(url)
-                
-                # Wait for comment box
-                comment_box = WebDriverWait(driver, 40).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "#simplebox-placeholder"))
-                )
-                comment_box.click()
-                
-                # Find and fill comment field
-                comment_field = WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, "#contenteditable-root"))
-                )
-                
-                # Select random comment
-                random_comment = random.choice(comments)
-                comment_field.send_keys(random_comment)
-                
-                """
-                # Submit comment
-                submit_button = driver.find_element(By.CSS_SELECTOR, "#submit-button")
-                submit_button.click()
-                """
-                
-                # Wait between comments
-                await asyncio.sleep(random.uniform(30, 60))
-                
-                print(f"Successfully posted comment on {url} using profile: {profile}")    
-            except Exception as e:
-                print(f"Error posting comment on {url} with profile {profile}: {e}")
+    driver = setup_driver(profile)
+
+    for url in video_urls:
+        try:
+            driver.get(url)
+            
+            scroll_attempts = 0
+            while scroll_attempts < 2:
+                driver.execute_script("window.scrollBy(0, 500);")
+                await asyncio.sleep(1)
+                scroll_attempts += 1
+
+            # Wait for comment box
+            comment_box = WebDriverWait(driver, 40).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "#simplebox-placeholder"))
+            )
+            comment_box.click()
+            
+            # Find and fill comment field
+            comment_field = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, "#contenteditable-root"))
+            )
+            
+            # Select random comment
+            random_comment = random.choice(comments)
+            comment_field.send_keys(random_comment)
+            
+            # Submit comment
+            submit_button = driver.find_element(By.CSS_SELECTOR, "#submit-button")
+            submit_button.click()
+
+            
+            # Wait between comments
+            await asyncio.sleep(random.uniform(2, 5))
+            
+            print(f"Successfully posted comment on {url} using profile: {profile}")    
+        except Exception as e:
+            print(f"Error posting comment on {url} with profile {profile}: {e}")
+            
+    driver.quit()
 
 async def post_comments(video_urls_dict: Dict[str, List[str]], profiles: List[str], comments: List[str]) -> None:
     """Post comments on all videos using rotating profiles, two at a time."""
@@ -75,7 +82,7 @@ async def post_comments(video_urls_dict: Dict[str, List[str]], profiles: List[st
     tasks = []
 
     dict_items = list(video_urls_dict.items())
-    chunk_size = 70
+    chunk_size = 2
 
     for i in range(0, len(dict_items), chunk_size):
         # Get a chunk of 70 key-value pairs
@@ -85,11 +92,8 @@ async def post_comments(video_urls_dict: Dict[str, List[str]], profiles: List[st
         profile1 = await profile_rotator.get_next_profile()
         profile2 = await profile_rotator.get_next_profile()
 
-        # Post comments concurrently using the two profiles
-        tasks.append(asyncio.create_task(post_comments_with_profiles(chunk, profile1, profile2, comments)))
-
-    # Wait for all chunks to be processed
-    await asyncio.gather(*tasks)
+    # Post comments concurrently using the two profiles
+    await post_comments_with_profiles(chunk, profile1, profile2, comments)
 
 async def post_comments_with_profiles(video_urls_slice: List[tuple], profile1: str, profile2: str, comments: List[str]) -> None:
     """Post comments on a slice of video URLs using two profiles concurrently."""
@@ -103,14 +107,18 @@ async def post_comments_with_profiles(video_urls_slice: List[tuple], profile1: s
     video_urls1 = [url for _, urls in slice1 for url in urls]
     video_urls2 = [url for _, urls in slice2 for url in urls]
 
+    print('-' * 60)
+    print(video_urls1)
+    print(video_urls2)
+    print('-' * 60)
+
     # Post comments using profile1 on slice1
-    tasks.append(asyncio.create_task(post_single_comment(video_urls1, profile1, comments)))
+    await post_single_comment(video_urls1, profile1, comments)
 
+    await asyncio.sleep(5)
+    
     # Post comments using profile2 on slice2
-    tasks.append(asyncio.create_task(post_single_comment(video_urls2, profile2, comments)))
-
-    # Wait for both profiles to finish their slices
-    await asyncio.gather(*tasks)
+    await post_single_comment(video_urls2, profile2, comments)
 
 
 def main():

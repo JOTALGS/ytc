@@ -6,6 +6,7 @@ import random
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.common.proxy import Proxy, ProxyType
 from webdriver_manager.chrome import ChromeDriverManager
 from testproxies import print_proxy_test_results, test_proxies, test_single_proxy, get_working_proxies
@@ -72,6 +73,8 @@ def list_chrome_profiles():
                     profiles[item] = profile_path
             else:
                 profiles[item] = profile_path
+    
+    profiles.pop("Default", None)
 
     return profiles
 
@@ -109,7 +112,7 @@ def get_profile_path(profile_identifier):
     raise ValueError(f"Could not find Chrome profile matching '{profile_identifier}'")
 
 
-def setup_driver(profile_identifier=None, headless=False):
+def setup_driver(profile_identifier=None, headless=False, proxies=None):
     """
     Create a Selenium WebDriver instance with optional user profile and proxy settings.
     Args:
@@ -125,6 +128,14 @@ def setup_driver(profile_identifier=None, headless=False):
     options.add_argument("--no-sandbox")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option('useAutomationExtension', False)
+    options.add_argument("--mute-audio")
+
+    prefs = {
+        "profile.managed_default_content_settings.images": 2,
+        "profile.managed_default_content_settings.videos": 2,
+        "profile.managed_default_content_settings.javascript": 1,
+    }
+    options.add_experimental_option("prefs", prefs)
 
     if headless:
         options.add_argument("--headless")
@@ -149,12 +160,31 @@ def setup_driver(profile_identifier=None, headless=False):
         driver.get("https://www.whatismyipaddress.com/")
         time.sleep(5)
 
+    capabilities = DesiredCapabilities.CHROME
+    capabilities['goog:loggingPrefs'] = {'performance': 'ALL'}
+
     service = Service(ChromeDriverManager().install())
+    options.set_capability('goog:loggingPrefs', {'performance': 'ALL'})
     driver = webdriver.Chrome(service=service, options=options)
     
     # Remove the "navigator.webdriver" property
     driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+
+    driver.execute_cdp_cmd(
+        "Network.setBlockedURLs",
+        {
+            "urls": [
+                "*.mp4",
+                "*.jpg",
+                "*.png",
+                "*.gif",
+                "*.css",
+            ]
+        }
+    )
+    driver.execute_cdp_cmd("Network.enable", {})
     
+    driver.refresh()
 
     return driver
 
